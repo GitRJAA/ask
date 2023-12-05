@@ -11,7 +11,7 @@ from elevenlabs import generate, stream
 from elevenlabs import set_api_key
 sys.path.append(os.path.expanduser('~'))
 from my_env import API_KEY_OPENAI, API_KEY_ELEVENLABS
-VERSION = 0.2
+VERSION = 0.3
 ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/voices"
 ELEVENLABS_HEADERS = {"xi-api-key": API_KEY_ELEVENLABS}
 ELEVENLABS_VOICE_LIST = json.loads(requests.request("GET", ELEVENLABS_API_URL, headers=ELEVENLABS_HEADERS).text)['voices']
@@ -46,10 +46,10 @@ if __name__ == '__main__':
     parser.add_argument('prompt', nargs='?', type=str, help='The prompt for the query', default=None)
 
     parser.add_argument('-l', '--list', action='store_true', help='Display a list of valid speaker names')
-    parser.add_argument('-i', '--image_path', type=str, help='The path to the either a local image file (optional)', default=None)
+    parser.add_argument('-i', '--image_path', type=str, help='The path to the either a local image file of http(s) URL (optional)', default=None)
 
     speech_options = parser.add_mutually_exclusive_group()
-    speech_options.add_argument('-s', '--silent', action='store_true', help='Do not use speech.')
+    speech_options.add_argument('-s', '--silent', action='store_true', help='Do not use speech')
     speech_options.add_argument('-v', '--voice', help='Specify a speaker by name')
     speech_options.add_argument('-q', '--query', help='Query speaker details by name')
 
@@ -91,32 +91,30 @@ if __name__ == '__main__':
             base64_image = encode_image(args.image_path)
             url = f"data:image/jpeg;base64,{base64_image}"
 
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key_openai}" }
+    openai_headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key_openai}" }
 
-    payload = {
+    openai_payload = {
         "model": "gpt-4-vision-preview",
-        "messages": [
-            {
+        "messages": [{
                 "role": "user",
                 "content": [
                     {
                         "type": "text",
                         "text": args.prompt
                     }
-                ]
-            }
+                ]}
         ], "max_tokens": 4096 }
 
     # Add the image to the payload if provided
     if url:
-        payload["messages"][0]["content"].append({
+        openai_payload["messages"][0]["content"].append({
             "type": "image_url",
             "image_url": {
                 "url": url
             }
         })
 
-    response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+    response = requests.post("https://api.openai.com/v1/chat/completions", headers=openai_headers, json=openai_payload)
 
     responseContent = response.json()['choices'][0]['message']['content']
     print(responseContent)
