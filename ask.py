@@ -46,7 +46,7 @@ if __name__ == '__main__':
     parser.add_argument('prompt', nargs='?', type=str, help='The prompt for the query', default=None)
 
     parser.add_argument('-l', '--list', action='store_true', help='Display a list of valid speaker names')
-    parser.add_argument('-i', '--image_path', type=str, help='The path to the either a local image file of http(s) URL (optional)', default=None)
+    parser.add_argument('-i', '--image_path', type=str, help='The path to the either a local image file or http(s) URL (optional)', default=None)
 
     speech_options = parser.add_mutually_exclusive_group()
     speech_options.add_argument('-s', '--silent', action='store_true', help='Do not use speech')
