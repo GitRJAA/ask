@@ -17,7 +17,7 @@ mv ask.py ~/.local/bin/ask
 ```
 usage: ask [-h] [-l] [-i IMAGE_PATH] [-s | -v VOICE | -q QUERY] [prompt]
 
-ask v0.3 Query OpenAI with an optional image and a prompt.
+ask v0.4 Query OpenAI with an optional image and a prompt.
 
 positional arguments:
   prompt                The prompt for the query
