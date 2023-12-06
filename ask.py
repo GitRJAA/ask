@@ -6,7 +6,7 @@ from pathlib import Path
 from elevenlabs import generate, stream, set_api_key
 sys.path.append(os.path.expanduser('~'))
 from my_env import API_KEY_OPENAI, API_KEY_ELEVENLABS
-VERSION = 0.4
+VERSION = 0.5
 ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/voices"
 ELEVENLABS_HEADERS = {"xi-api-key": API_KEY_ELEVENLABS}
 ELEVENLABS_VOICE_LIST = json.loads(requests.request("GET", ELEVENLABS_API_URL, headers=ELEVENLABS_HEADERS).text)['voices']
@@ -111,7 +111,8 @@ if __name__ == '__main__':
     if args.silent: exit()
 
     for voice in ELEVENLABS_VOICE_LIST:
-        if args.voice.upper() in voice['name'].upper(): chosen_voice = voice
+        if args.voice:
+            if args.voice.upper() in voice['name'].upper(): chosen_voice = voice
 
     if not chosen_voice: 
         chosen_voice = random.choice(ELEVENLABS_VOICE_LIST)
