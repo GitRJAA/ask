@@ -1,20 +1,32 @@
 #!/usr/bin/env python3
 # Query OpenAI with an optional image and a prompt, hear the response read by a voice from ElevenLabs - KFR '23
-import random, argparse, base64, requests, json
+import random, argparse, base64, requests
 import sys,os
 from pathlib import Path
-from elevenlabs import generate, stream, set_api_key
-sys.path.append(os.path.expanduser('~'))
-from my_env import API_KEY_OPENAI, API_KEY_ELEVENLABS
-VERSION = 0.5
-ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/voices"
-ELEVENLABS_HEADERS = {"xi-api-key": API_KEY_ELEVENLABS}
-ELEVENLABS_VOICE_LIST = json.loads(requests.request("GET", ELEVENLABS_API_URL, headers=ELEVENLABS_HEADERS).text)['voices']
-base64_image, url, chosen_voice = None, None, None
 
-# API keys
-api_key_openai = API_KEY_OPENAI
+VERSION = 0.7
+
+# API TTS
+from elevenlabs import generate, stream, set_api_key, voices
+sys.path.append(os.path.expanduser('~'))
+from my_env import API_KEY_ELEVENLABS, API_KEY_OPENAI
 set_api_key(API_KEY_ELEVENLABS)
+
+# Local TTS
+import wave, sounddevice, pyaudio
+from balacoon_tts import TTS
+from huggingface_hub import hf_hub_download
+MODEL = 'en_us_hifi92_light_cpu.addon'
+model_path = hf_hub_download(repo_id = "balacoon/tts", filename = MODEL)
+tts = TTS(model_path)
+speaker = tts.get_speakers()[-1]
+CHUNK = 1024
+
+base64_image, url, chosen_voice = None, None, None
+TEMP_FILE = 'tmp.wav'
+
+# OpenAI API key
+api_key_openai = API_KEY_OPENAI
 
 def text_stream(message: str): yield message
 
@@ -29,6 +41,27 @@ def print_columns(string_list, num_columns:int = 6):
         # Create a dynamic format string based on the number of items in row_items
         format_string = " ".join(["{:<20}"] * len(row_items))
         print(format_string.format(*row_items))
+
+def flatten_objects(obj_list):
+    def convert_and_flatten(data, parent_key='', sep='_'):
+        items = []
+        for k, v in data.items():
+            new_key = f"{parent_key}{sep}{k}" if parent_key else k
+            if isinstance(v, dict):
+                items.extend(convert_and_flatten(v, new_key, sep=sep).items())
+            else:
+                items.append((new_key, str(v)))
+        return dict(items)
+
+    flattened_list = []
+    for obj in obj_list:
+        # If the object is a custom class, convert it to a dictionary first
+        if not isinstance(obj, dict):
+            obj = vars(obj)  # vars() gets the __dict__ attribute of an object
+        flattened_dict = convert_and_flatten(obj)
+        flattened_list.append(flattened_dict)
+    
+    return flattened_list
 
 if __name__ == '__main__':
 
@@ -50,14 +83,14 @@ if __name__ == '__main__':
     voice_list = []
     if args.list: # List voices
         print(f"Voice names:")
-        for voice in ELEVENLABS_VOICE_LIST: 
+        for voice in [{'name': 'local'}] + flatten_objects(voices()): 
             voice_list.append(voice['name'])
         print_columns(voice_list)
         print(f"Total voices available: {len(voice_list)}")
         exit()
     elif args.query: # Get voice details
         print(f"Quering voice: {args.query}")
-        for voice in ELEVENLABS_VOICE_LIST:
+        for voice in flatten_objects(voices()):
             if args.query in voice['name']:
 
                 output = ''
@@ -110,20 +143,62 @@ if __name__ == '__main__':
 
     if args.silent: exit()
 
-    for voice in ELEVENLABS_VOICE_LIST:
-        if args.voice:
-            if args.voice.upper() in voice['name'].upper(): chosen_voice = voice
+    # TTS response
+    text = responseContent.strip()
 
-    if not chosen_voice: 
-        chosen_voice = random.choice(ELEVENLABS_VOICE_LIST)
+    if not args.voice or 'local' in args.voice:
 
-    byline = f"\n Red by: {chosen_voice['name']}"
-    print (f"{byline} ({chosen_voice['category']} {chosen_voice['labels']['age']} {chosen_voice['labels']['accent']} {chosen_voice['labels']['gender']})")
+        samples = tts.synthesize(text, speaker)
+        with wave.open(TEMP_FILE, "w") as fp:
+            fp.setparams((1, 2, tts.get_sampling_rate(), len(samples), "NONE", "NONE"))
+            fp.writeframes(samples)
 
-    audio_stream = generate(
-        text = text_stream(responseContent + byline),
-        voice = chosen_voice['name'],
-        model = "eleven_turbo_v2",
-        # model = "eleven_monolingual_v1",
-        stream = True )
-    stream(audio_stream)
+        with wave.open(TEMP_FILE, 'rb') as wf:
+
+            # Initialize PyAudio
+            p = pyaudio.PyAudio()
+            stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
+                            channels=wf.getnchannels(),
+                            rate=wf.getframerate(),
+                            output=True)
+
+            # Read data in chunks
+            data = wf.readframes(CHUNK)
+            while len(data) > 0:
+                stream.write(data)
+                data = wf.readframes(CHUNK)
+
+            # Close and terminate the stream
+            stream.close()
+            p.terminate()
+
+        os.remove(TEMP_FILE)
+
+    else:
+       
+        voice_list = flatten_objects(voices())
+
+        for voice in voice_list:
+            if args.voice:
+                if args.voice.upper() in voice['name'].upper(): chosen_voice = voice
+
+        if not chosen_voice: 
+            chosen_voice = random.choice(voice_list)
+
+        audio_stream = generate(
+            text = text_stream(text),
+            voice = chosen_voice['name'],
+            model = "eleven_turbo_v2",
+            stream = True )
+
+        stream(audio_stream)
+
+        byline = f"Red by: {chosen_voice['name']}"
+        # audio_stream = generate(
+        #     text = text_stream(byline),
+        #     voice = chosen_voice['name'],
+        #     model = "eleven_turbo_v2",
+        #     stream = True )
+        # stream(audio_stream)
+
+        print (f"\n{byline.replace('Red','Read')} ({chosen_voice['category']} {chosen_voice.get('labels_age')} {chosen_voice.get('labels_accent')} {chosen_voice.get('labels_gender')}) {len(text)} chars = ${(len(text) * 0.25 / 1000):.4f}")
