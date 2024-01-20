@@ -9,6 +9,10 @@ API_KEY_ELEVENLABS = '<insert_your_ElevenLabs_API_key_here>'
 
 ### Example installation:
 ```
+sudo apt install portaudio-dev19
+git clone https://github.com/KF-R/ask
+cd ask
+pip install -r requirements.txt
 chmod +x ask.py
 mv ask.py ~/.local/bin/ask
 ```
